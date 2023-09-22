@@ -79,16 +79,15 @@ def api_call(url, username, password):
     if not HTTP_CHECK:
         try:
             RESPONSE = requests.get("https://"+socket.getfqdn(), timeout=30)
-            if RESPONSE.status_code == 200:
+            if RESPONSE.ok:
                 HTTP_CHECK = True
         except requests.exceptions.RequestException as error:
             print("A request test to the Satellite at: https://"+
                   str(socket.getfqdn())+" failed with the following error: ")
             print(f"An error occurred: {error}")
-    else:
-        SESSION.auth = (username, password)
-        response = SESSION.get(url, verify="/root/ssl-build/katello-server-ca.crt")
-        return response
+    SESSION.auth = (username, password)
+    response = SESSION.get(url, verify="/root/ssl-build/katello-server-ca.crt")
+    return response
 
 def search_for_host():
     if args.client is not None:
@@ -97,7 +96,7 @@ def search_for_host():
             client = api_call(HOSTNAME+endpoint+args.client, USERNAME, PASSWORD)
         except requests.exceptions.RequestException as error:
             print(f"An error occurred: {error}")
-        return client.json
+        return client.json()
     else:
         print("No client value given")
         print("Please provide a client value with the command")
@@ -187,9 +186,15 @@ def parse_for_arch(client):
     return arch
 
 def parse_for_major_version(client):
-    dist_version = client['facts']['distribution::version']
-    major = dist_version[0]
-    return int(major)
+    if client['facts']:
+        dist_version = client['facts']['distribution::version']
+        major = dist_version[0]
+        return int(major)
+    else:
+        print("Client Facts are empty")
+        print("Please check if the client is registered and that the client's facts have been updated")
+        print("You can update the facts by running the following command on the client:")
+        print("    subscription-manager facts --update")
 
 def parse_for_minor_version(client): 
     dist_version = client['facts']['distribution::version']
