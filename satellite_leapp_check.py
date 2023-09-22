@@ -33,6 +33,8 @@ USERNAME = None
 PASSWORD = None
 HOSTNAME = None
 SESSION = requests.Session()
+SUCCESS = '✅'
+FAIL = '❌'
 
 parser = argparse.ArgumentParser(description="A script to enable, sync, and update content views for clients looking to leapp")
 parser.add_argument("-c","--client", action='store', type=str, help="The registered hostname of the RHEL client\n\n\n\n")
@@ -209,9 +211,10 @@ def parse_client():
     client = search_for_host()
     if parse_for_arch(client) == 'x86_64':
         if parse_for_major_version(client) == 7:
-            print("RHEL 7 version detected")
-            if parse_for_minor_version < 9:
-                print("RHEL version is not the lastest version, please update to version 7.9 before trying to leapp to RHEL 8")
+            print(SUCCESS+" RHEL 7 version detected")
+            minor = parse_for_minor_version(client)
+            if minor < 9:
+                print(FAIL+" RHEL minor version \""+str(minor)+"\" is not the lastest version, please update to version 7.9 before trying to leapp to RHEL 8")
             else:
                 org_id = parse_for_organization(client)
                 LEAPP_VERSION = get_leapp_version()
@@ -221,26 +224,26 @@ def parse_client():
                    "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+LEAPP_VERSION,
                    "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+LEAPP_VERSION]
                 if check_org_for_leapp_repos(org_id,RHEL7_X86_REPOS):
-                    print("Organization ID "+org_id+" has the required repos enabled")
+                    print(SUCCESS+" Organization ID "+org_id+" has the required repos enabled")
                     print("Checking client's content view for repo availability")
                     cv,cv_id = parse_for_content_view(client)
                     if cv != "Default Organization View":
                         if check_cv_for_leapp_repos(cv,RHEL7_X86_REPOS):
-                            print("Content View Version ID "+cv+" has the required repositories for leapp upgrade")
+                            print(SUCCESS+" Content View Version ID "+cv+" has the required repositories for leapp upgrade")
                             print("Checking that the repos contain content")
                             client_lce = client['lifecycle_environment_name']
                             if check_repos_for_content(cv_id,RHEL7_X86_REPOS,client_lce):
-                                print("Congratulations!!! "+client['name']+' is ready to LEAPP')
+                                print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
                     else:
                         print("You are using the Default Organization View")
                         print("Checking that the repos contain content")
                         client_lce = client['lifecycle_environment_name']
                         if check_repos_for_content(cv_id,RHEL7_X86_REPOS,client_lce):
-                            print("Congratulations!!! "+client['name']+' is ready to LEAPP')
+                            print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
 
         else:
-            print("Version detection failed")
-        print("Check the client's facts for a 'distribution::version")
+            print(FAIL+" Version detection failed")
+            print("Check the client's facts for a 'distribution::version")
 
 
 def main():
