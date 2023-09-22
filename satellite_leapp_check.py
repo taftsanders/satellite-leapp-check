@@ -34,17 +34,12 @@ PASSWORD = None
 HOSTNAME = None
 SESSION = requests.Session()
 
-parser = argparse.ArgumentParser(description="A script to enable, sync, and"
-                                 " update content views for clients looking to leapp")
-parser.add_argument("-c","--client", action='store_true', 
-                    type=str, help="The registered hostname of the RHEL client")
-parser.add_argument("-v","--version", action='store_true', 
-                    type=str, help="The major and minor release you are leapping to. EX: \"8.6\"")
-parser.add_argument("-u", "--username", action='store_true',
-                     type=str, default=None, help="Satellite WebUI Username")
-parser.add_argument("-p", "--password", action='store_true',
-                     type=str, default=None, help="Satellite WebUI Password")
-# parser.add_argument("--newCV", action='store_true', type=str, default=None,
+parser = argparse.ArgumentParser(description="A script to enable, sync, and update content views for clients looking to leapp")
+parser.add_argument("-c","--client", action='store', type=str, help="The registered hostname of the RHEL client\n\n\n\n")
+parser.add_argument("-v","--version", action='store', type=str, help="The major and minor release you are leapping to. EX: \"8.6\"\n")
+parser.add_argument("-u", "--username", action='store', type=str, default=None, help="Satellite WebUI Username\n")
+parser.add_argument("-p", "--password", action='store', type=str, default=None, help="Satellite WebUI Password\n")
+# parser.add_argument("--newCV", action='store', type=str, default=None,
 #                     help="New content view name if user would like to create a new CV"
 #                     " instead of updating the current CV assigned to the host")
 args = parser.parse_args()
@@ -146,14 +141,39 @@ def check_cv_for_leapp_repos(cv,leapp_repos):
         exit
     else:
         return True
+    
+def check_repos_for_content(cv_id,leapp_repos,client_lce):
+    endpoint = '/katello/api/content_view_versions/'+str(cv_id)
+    cv_info = api_call(HOSTNAME+endpoint, USERNAME, PASSWORD)
+    repos = cv_info['repositories']
+    for repo in repos:
+        if repo['name'] in leapp_repos:
+            endpoint = '/katello/api/repositories/'+str(repo['id'])
+            repo_content = api_call(HOSTNAME+endpoint,USERNAME,PASSWORD)
+            empty_repos = []
+            if repo_content['content_counts']['rpm'] == 0:
+                empty_repos.append(repo['name'])
+            else:
+                continue
+        else:
+            continue
+    if len(empty_repos) > 0:
+        print("The falling repos were found to have 0 RPMs")
+        print(empty_repos)
+        print("Which means that the repository wasn't synced before the content view was published")
+        print("Please sync these repos again and publish a new version of the content view: "+cv_info['content_view']['name'])
+        print("Then promote the new version to the client's lifecycle: "+client_lce)
+        exit
+    else:
+        return True
 
 def parse_for_content_view(client):
     content_view = client['content_facet_attributes']['content_view_name']
     content_view_version_id = client['content_facet_attributes']['content_view_version_id']
     if content_view == "Default Organization View":
-        return content_view
+        return content_view,content_view_version_id
     else:
-        return content_view_version_id
+        return content_view,content_view_version_id
 
 def parse_for_compliance(client):
     sub_status = client['subscription_status_label']
@@ -180,9 +200,6 @@ def parse_for_organization(client):
     org_id = client['organization_id']
     return org_id
 
-def search_for_leapp_repos():
-
-
 def parse_client():
     client = search_for_host()
     if parse_for_arch(client) == 'x86_64':
@@ -201,10 +218,20 @@ def parse_client():
                 if check_org_for_leapp_repos(org_id,RHEL7_X86_REPOS):
                     print("Organization ID "+org_id+" has the required repos enabled")
                     print("Checking client's content view for repo availability")
-                    cv = parse_for_content_view(client)
+                    cv,cv_id = parse_for_content_view(client)
                     if cv != "Default Organization View":
                         if check_cv_for_leapp_repos(cv,RHEL7_X86_REPOS):
                             print("Content View Version ID "+cv+" has the required repositories for leapp upgrade")
+                            print("Checking that the repos contain content")
+                            client_lce = client['lifecycle_environment_name']
+                            if check_repos_for_content(cv_id,RHEL7_X86_REPOS,client_lce):
+                                print("Congratulations!!! "+client['name']+' is ready to LEAPP')
+                    else:
+                        print("You are using the Default Organization View")
+                        print("Checking that the repos contain content")
+                        client_lce = client['lifecycle_environment_name']
+                        if check_repos_for_content(cv_id,RHEL7_X86_REPOS,client_lce):
+                            print("Congratulations!!! "+client['name']+' is ready to LEAPP')
 
         else:
             print("Version detection failed")
