@@ -22,6 +22,8 @@ import requests
 import argparse
 import socket
 import getpass
+import subprocess
+
 
 LEAPP_VERSION = None
 # If a new content view is wanted, put the name of the content view below
@@ -72,11 +74,34 @@ def get_leapp_version():
     if args.version:
         LEAPP_VERSION = args.version
     else:
-        print("RHEL version to leapp to not supplied")
-        print("Please use the \"-v\" option to specify a RHEL version to leapp to")
-        print("Example: -v 8.6")
+        print(FAIL+" RHEL version to leapp to not supplied")
+        print("- Please use the \"-v\" option to specify a RHEL version to leapp to")
+        print("- Example: -v 8.6")
+
+def determine_leapp_repos(arch):
+    # using the arch type, determine what repos are needed
+    if arch == 'x86_64':
+        RHEL_X86_REPOS = ["Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server",
+                           "Red Hat Enterprise Linux 7 Server RPMs x86_64 7.9",
+                           "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64",
+                           "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+LEAPP_VERSION,
+                           "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+LEAPP_VERSION]
+        return RHEL_X86_REPOS
+    elif arch == 's390x':
+        RHEL_s390x_REPOS = []
+        return RHEL_s390x_REPOS
+    elif arch == 'ppc64le':
+        RHEL_ppc64le_REPOS = []
+        return RHEL_ppc64le_REPOS
+    else:
+        print(FAIL+" Architecture type not supported.")
+        print("- Please review the supporte architectures in the documentation:")
+        print("  - https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html-single/upgrading_from_rhel_7_to_rhel_8/index#planning-an-upgrade_upgrading-from-rhel-7-to-rhel-8")
+
+
 
 def api_call(url, username, password):
+    # given the url, username and password make the API call
     global HTTP_CHECK
     if not HTTP_CHECK:
         try:
@@ -84,7 +109,7 @@ def api_call(url, username, password):
             if RESPONSE.ok:
                 HTTP_CHECK = True
         except requests.exceptions.RequestException as error:
-            print("A request test to the Satellite at: https://"+
+            print(FAIL+" A request test to the Satellite at: https://"+
                   str(socket.getfqdn())+" failed with the following error: ")
             print(f"An error occurred: {error}")
     SESSION.auth = (username, password)
@@ -92,7 +117,8 @@ def api_call(url, username, password):
     return response
 
 def search_for_host():
-    if args.client is not None:
+    # Make the call for the client value on the Satellite
+    if args.client:
         endpoint = '/api/hosts/'
         try:
             client = api_call(HOSTNAME+endpoint+args.client, USERNAME, PASSWORD)
@@ -100,15 +126,39 @@ def search_for_host():
             print(f"An error occurred: {error}")
         return client.json()
     else:
-        print("No client value given")
-        print("Please provide a client value with the command")
-        print("Example: \"satellite_leapp_check -c client.example.com\"")
+        print(FAIL+" No client value given")
+        print("- Please provide a client value with the command")
+        print("- Example: \"satellite_leapp_check -c client.example.com\"")
+
+def enable_leapp_repos(org_id, arch, releasever, leapp_repos):
+    # Run commands to enable leapp_repos on the Satellite
+    command = 'hammer repository-set enable '
+    name = '--name '
+    release = '--release '
+    basearch = '--basearch '
+    org = '--organization-id '
+    for repo in leapp_repos:
+        hammer_enable_repo = command+name+repo+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
+        result = subprocess.run(hammer_enable_repo, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode == 0:
+            print(SUCCESS+" Repository Enabled: "+repo)
+            print(result.stdout)
+            print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
+        else:
+            print(FAIL+" Failed to enable repository: "+repo)
+            print(result.stderr)
+
+def sync_leapp_repos(org_id, arch, releasever, leapp_repos):
+    # Run commands to sync the leapp repos
+    # Not available until RFE 2240648
+    pass
 
 def check_org_for_leapp_repos(org_id, leapp_repos):
-    endpoint = '/katello/api/organizations/'+org_id+'/repositories'
-    repos = api_call(HOSTNAME+endpoint, USERNAME, PASSWORD)
+    endpoint = '/katello/api/organizations/'+str(org_id)+'/repositories'
+    repo_call = api_call(HOSTNAME+endpoint, USERNAME, PASSWORD)
+    repos = repo_call.json()
+    repo_name = []
     for repo in repos['results']:
-        repo_name = []
         repo_name.append(repo['name'])
     missing_repos = []
     for repo in leapp_repos:
@@ -118,14 +168,15 @@ def check_org_for_leapp_repos(org_id, leapp_repos):
             missing_repos.append(repo)
     if len(missing_repos) > 0:
         for repo in missing_repos:
-            print("Organization ID "+org_id+" is missing "+repo)
-        exit
+            print(FAIL+" Organization ID "+str(org_id)+" is missing "+repo)
+            return False
     else:
         return True
     
 def check_cv_for_leapp_repos(cv,leapp_repos):
     endpoint = '/katello/api/content_view_versions/'+str(cv)
-    cv_info = api_call(HOSTNAME+endpoint, USERNAME, PASSWORD)
+    cv_call = api_call(HOSTNAME+endpoint, USERNAME, PASSWORD)
+    cv_info = cv_call.json()
     repos = cv_info['repositories']
     repo_names = []
     missing_repos = []
@@ -138,19 +189,21 @@ def check_cv_for_leapp_repos(cv,leapp_repos):
             missing_repos.append(repo)
     if len(missing_repos) > 0:
         for repo in missing_repos:
-            print("Content View ID "+cv+" is missing "+repo)
+            print(FAIL+" Content View ID "+str(cv)+" is missing "+repo)
         exit
     else:
         return True
     
 def check_repos_for_content(cv_id,leapp_repos,client_lce):
     endpoint = '/katello/api/content_view_versions/'+str(cv_id)
-    cv_info = api_call(HOSTNAME+endpoint, USERNAME, PASSWORD)
+    cv_call = api_call(HOSTNAME+endpoint, USERNAME, PASSWORD)
+    cv_info = cv_call.json()
     repos = cv_info['repositories']
     for repo in repos:
         if repo['name'] in leapp_repos:
             endpoint = '/katello/api/repositories/'+str(repo['id'])
-            repo_content = api_call(HOSTNAME+endpoint,USERNAME,PASSWORD)
+            repo_content_call = api_call(HOSTNAME+endpoint,USERNAME,PASSWORD)
+            repo_content = repo_content_call.json()
             empty_repos = []
             if repo_content['content_counts']['rpm'] == 0:
                 empty_repos.append(repo['name'])
@@ -159,11 +212,11 @@ def check_repos_for_content(cv_id,leapp_repos,client_lce):
         else:
             continue
     if len(empty_repos) > 0:
-        print("The falling repos were found to have 0 RPMs")
-        print(empty_repos)
-        print("Which means that the repository wasn't synced before the content view was published")
-        print("Please sync these repos again and publish a new version of the content view: "+cv_info['content_view']['name'])
-        print("Then promote the new version to the client's lifecycle: "+client_lce)
+        print(FAIL+" The following repos were found to have 0 RPMs")
+        print("- "+empty_repos)
+        print("- Which means that the repository wasn't synced before the content view was published")
+        print("- Please sync these repos again and publish a new version of the content view: "+cv_info['content_view']['name'])
+        print("- Then promote the new version to the client's lifecycle: "+client_lce)
         exit
     else:
         return True
@@ -189,13 +242,16 @@ def parse_for_arch(client):
 
 def parse_for_major_version(client):
     if client['facts']:
-        dist_version = client['facts']['distribution::version']
-        major = dist_version[0]
-        return int(major)
+        try:
+            dist_version = client['facts']['distribution::version']
+            major = dist_version[0]
+            return int(major)
+        except KeyError:
+            print(FAIL+" 'distribution::version' fact not present on the system")
     else:
-        print("Client Facts are empty")
-        print("Please check if the client is registered and that the client's facts have been updated")
-        print("You can update the facts by running the following command on the client:")
+        print(FAIL+" Client Facts are empty")
+        print("- Please check if the client is registered and that the client's facts have been updated")
+        print("- You can update the facts by running the following command on the client:")
         print("    subscription-manager facts --update")
 
 def parse_for_minor_version(client): 
@@ -209,7 +265,10 @@ def parse_for_organization(client):
 
 def parse_client():
     client = search_for_host()
-    if parse_for_arch(client) == 'x86_64':
+    LEAPP_VERSION = get_leapp_version()
+    arch = parse_for_arch(client)
+    if arch == 'x86_64':
+        leapp_repos = determine_leapp_repos(arch)
         if parse_for_major_version(client) == 7:
             print(SUCCESS+" RHEL 7 version detected")
             minor = parse_for_minor_version(client)
@@ -217,33 +276,45 @@ def parse_client():
                 print(FAIL+" RHEL minor version \""+str(minor)+"\" is not the lastest version, please update to version 7.9 before trying to leapp to RHEL 8")
             else:
                 org_id = parse_for_organization(client)
-                LEAPP_VERSION = get_leapp_version()
-                RHEL7_X86_REPOS = ["Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server",
-                   "Red Hat Enterprise Linux 7 Server RPMs x86_64 7.9",
-                   "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64",
-                   "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+LEAPP_VERSION,
-                   "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+LEAPP_VERSION]
-                if check_org_for_leapp_repos(org_id,RHEL7_X86_REPOS):
-                    print(SUCCESS+" Organization ID "+org_id+" has the required repos enabled")
+                if check_org_for_leapp_repos(org_id,leapp_repos):
+                    print(SUCCESS+" Organization ID "+str(org_id)+" has the required repos enabled")
                     print("Checking client's content view for repo availability")
                     cv,cv_id = parse_for_content_view(client)
                     if cv != "Default Organization View":
-                        if check_cv_for_leapp_repos(cv,RHEL7_X86_REPOS):
+                        if check_cv_for_leapp_repos(cv_id,leapp_repos):
                             print(SUCCESS+" Content View Version ID "+cv+" has the required repositories for leapp upgrade")
                             print("Checking that the repos contain content")
-                            client_lce = client['lifecycle_environment_name']
-                            if check_repos_for_content(cv_id,RHEL7_X86_REPOS,client_lce):
+                            client_lce = client['content_facet_attributes']['lifecycle_environment_name']
+                            if check_repos_for_content(cv_id,leapp_repos,client_lce):
                                 print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
                     else:
                         print("You are using the Default Organization View")
                         print("Checking that the repos contain content")
-                        client_lce = client['lifecycle_environment_name']
-                        if check_repos_for_content(cv_id,RHEL7_X86_REPOS,client_lce):
+                        client_lce = client['content_facet_attributes']['lifecycle_environment_name']
+                        if check_repos_for_content(cv_id,leapp_repos,client_lce):
                             print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
-
+                else:
+                    enable_leapp_repos(org_id, arch, args.version, leapp_repos)
+                    if check_org_for_leapp_repos(org_id,leapp_repos):
+                        print(SUCCESS+" Organization ID "+str(org_id)+" has the required repos enabled")
+                        print("Checking client's content view for repo availability")
+                        cv,cv_id = parse_for_content_view(client)
+                        if cv != "Default Organization View":
+                            if check_cv_for_leapp_repos(cv_id,leapp_repos):
+                                print(SUCCESS+" Content View Version ID "+cv+" has the required repositories for leapp upgrade")
+                                print("Checking that the repos contain content")
+                                client_lce = client['content_facet_attributes']['lifecycle_environment_name']
+                                if check_repos_for_content(cv_id,leapp_repos,client_lce):
+                                    print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
+                        else:
+                            print("You are using the Default Organization View")
+                            print("Checking that the repos contain content")
+                            client_lce = client['content_facet_attributes']['lifecycle_environment_name']
+                            if check_repos_for_content(cv_id,leapp_repos,client_lce):
+                                print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
         else:
             print(FAIL+" Version detection failed")
-            print("Check the client's facts for a 'distribution::version")
+            print("- Check the client's facts for a 'distribution::version")
 
 
 def main():
