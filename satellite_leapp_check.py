@@ -23,15 +23,9 @@ import argparse
 import socket
 import getpass
 import subprocess
-
-RHEL_X86_REPOS = ["Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server",
-                    "Red Hat Enterprise Linux 7 Server RPMs x86_64 7.9",
-                    "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64",
-                    "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+LEAPP_VERSION,
-                    "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+LEAPP_VERSION]
+LEAPP_VERSION = None
 RHEL_s390x_REPOS = []
 RHEL_ppc64le_REPOS = []
-LEAPP_VERSION = None
 # If a new content view is wanted, put the name of the content view below
 # in the "NEW_CV_NAME" variable. Otherwise the content view assigned to
 # the host will be used.
@@ -76,17 +70,24 @@ def get_hostname():
     return HOSTNAME
 
 def get_leapp_version():
-    global LEAPP_VERSION
     if args.version:
         LEAPP_VERSION = args.version
     else:
         print(FAIL+" RHEL version to leapp to not supplied")
         print("- Please use the \"-v\" option to specify a RHEL version to leapp to")
         print("- Example: -v 8.6")
+    return LEAPP_VERSION
 
 def determine_leapp_repos(arch):
     # using the arch type, determine what repos are needed
+    global LEAPP_VERSION
+    LEAPP_VERSION = get_leapp_version()
     if arch == 'x86_64':
+        RHEL_X86_REPOS = ["Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server",
+                    "Red Hat Enterprise Linux 7 Server RPMs x86_64 7.9",
+                    "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64",
+                    "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+ str(LEAPP_VERSION),
+                    "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+str(LEAPP_VERSION)]
         return RHEL_X86_REPOS
     elif arch == 's390x':
         return RHEL_s390x_REPOS
@@ -187,8 +188,9 @@ def check_cv_for_leapp_repos(cv,leapp_repos):
         else:
             missing_repos.append(repo)
     if len(missing_repos) > 0:
+        print(FAIL+" Content View ("+HOSTNAME+"/content_views/"+str(cv_info['content_view_id'])+"#/versions) is missing the following repositories:")
         for repo in missing_repos:
-            print(FAIL+" Content View ID "+str(cv)+" is missing "+repo)
+            print(" - "+repo)
         exit
     else:
         return True
@@ -262,9 +264,19 @@ def parse_for_organization(client):
     org_id = client['organization_id']
     return org_id
 
+'''
+Check client for the following infractions based on arch
+- RHEL major version
+- RHEL minor version matches expected latest version
+- Check Organization for leapp repos
+- Check CV for leapp repos
+
+If Organization doesn't have leapp repos enabled
+- enable the required repos
+- sync the newly enabled repos
+'''
 def parse_client():
     client = search_for_host()
-    LEAPP_VERSION = get_leapp_version()
     arch = parse_for_arch(client)
     if arch == 'x86_64':
         leapp_repos = determine_leapp_repos(arch)
@@ -272,7 +284,7 @@ def parse_client():
             print(SUCCESS+" RHEL 7 version detected")
             minor = parse_for_minor_version(client)
             if minor < 9:
-                print(FAIL+" RHEL minor version \""+str(minor)+"\" is not the lastest version, please update to version 7.9 before trying to leapp to RHEL 8")
+                print(FAIL+" RHEL 7.\""+str(minor)+"\" is not the lastest version, please update to version 7.9 before trying to leapp to RHEL 8")
             else:
                 org_id = parse_for_organization(client)
                 if check_org_for_leapp_repos(org_id,leapp_repos):
