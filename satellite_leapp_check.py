@@ -24,7 +24,13 @@ import socket
 import getpass
 import subprocess
 
-
+RHEL_X86_REPOS = ["Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server",
+                    "Red Hat Enterprise Linux 7 Server RPMs x86_64 7.9",
+                    "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64",
+                    "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+LEAPP_VERSION,
+                    "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+LEAPP_VERSION]
+RHEL_s390x_REPOS = []
+RHEL_ppc64le_REPOS = []
 LEAPP_VERSION = None
 # If a new content view is wanted, put the name of the content view below
 # in the "NEW_CV_NAME" variable. Otherwise the content view assigned to
@@ -53,7 +59,7 @@ def get_username():
     if args.username:
         USERNAME = args.username
     else:
-        USERNAME = input("Enter your Satellite Username")
+        USERNAME = input("Enter your Satellite Username: ")
     return USERNAME
 
 def get_password():
@@ -81,17 +87,10 @@ def get_leapp_version():
 def determine_leapp_repos(arch):
     # using the arch type, determine what repos are needed
     if arch == 'x86_64':
-        RHEL_X86_REPOS = ["Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server",
-                           "Red Hat Enterprise Linux 7 Server RPMs x86_64 7.9",
-                           "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64",
-                           "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+LEAPP_VERSION,
-                           "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+LEAPP_VERSION]
         return RHEL_X86_REPOS
     elif arch == 's390x':
-        RHEL_s390x_REPOS = []
         return RHEL_s390x_REPOS
     elif arch == 'ppc64le':
-        RHEL_ppc64le_REPOS = []
         return RHEL_ppc64le_REPOS
     else:
         print(FAIL+" Architecture type not supported.")
