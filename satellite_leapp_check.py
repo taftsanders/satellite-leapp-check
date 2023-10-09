@@ -82,17 +82,41 @@ def determine_leapp_repos(arch):
     # using the arch type, determine what repos are needed
     global LEAPP_VERSION
     LEAPP_VERSION = get_leapp_version()
+    RHEL_REPOS = {
+        "x86_64":[
+            "Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server",
+            "Red Hat Enterprise Linux 7 Server RPMs x86_64 7.9",
+            "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64",
+            "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+str(LEAPP_VERSION),
+            "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+str(LEAPP_VERSION)
+                ],
+        # need to determine seperation of power 8 and 9
+        "ppc64le":[
+            "Red Hat Enterprise Linux 7 for IBM Power LE RPMs ppc64le 7.9",
+            "Red Hat Enterprise Linux 7 for IBM Power LE RPMs ppc64le 7Server",
+            "Red Hat Enterprise Linux 7 for POWER9 - Extras RPMs ppc64le 7Server",
+            "Red Hat Enterprise Linux 7 for POWER9 RPMs ppc64le 7Server",
+            "Red Hat Enterprise Linux 8 for Power, little endian - BaseOS (RPMs) "+str(LEAPP_VERSION),
+            "Red Hat Enterprise Linux 8 for Power, little endian - AppStream (RPMs)"+str(LEAPP_VERSION)
+            ],
+        # need to determine seperation of system Z and structure A
+        "s390x":[
+            "Red Hat Enterprise Linux 7 for IBM System z Structure A - Extras RPMs s390x 7Server",
+            "Red Hat Enterprise Linux 7 for IBM System z Structure A RPMs s390x 7Server",
+            "Red Hat Enterprise Linux 7 for IBM System z Structure A RPMs s390x 7.9",
+            "Red Hat Enterprise Linux 7 for System Z - Extras RPMs s390x",
+            "Red Hat Enterprise Linux 7 for System Z RPMs s390x 7.9",
+            "Red Hat Enterprise Linux 7 for System Z RPMs s390x 7Server",
+            "Red Hat Enterprise Linux 8 for IBM z Systems - BaseOS (RPMs)"+str(LEAPP_VERSION),
+            "Red Hat Enterprise Linux 8 for IBM z Systems - AppStream (RPMs)"+str(LEAPP_VERSION)
+            ]
+}
     if arch == 'x86_64':
-        RHEL_X86_REPOS = ["Red Hat Enterprise Linux 7 Server RPMs x86_64 7Server",
-                    "Red Hat Enterprise Linux 7 Server RPMs x86_64 7.9",
-                    "Red Hat Enterprise Linux 7 Server - Extras RPMs x86_64",
-                    "Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs "+ str(LEAPP_VERSION),
-                    "Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs "+str(LEAPP_VERSION)]
-        return RHEL_X86_REPOS
+        return RHEL_REPOS['x86_64']
     elif arch == 's390x':
-        return RHEL_s390x_REPOS
+        return RHEL_REPOS['s390x']
     elif arch == 'ppc64le':
-        return RHEL_ppc64le_REPOS
+        return RHEL_REPOS['ppc64le']
     else:
         print(FAIL+" Architecture type not supported.")
         print("- Please review the supporte architectures in the documentation:")
