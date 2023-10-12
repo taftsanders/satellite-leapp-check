@@ -207,16 +207,27 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
     org = '--organization-id '
     if basearch == "ppc64le":
         if sub_arch:
-            for repo in ENABLE_LEAPP_REPOS[basearch][sub_arch]:
-                hammer_enable_repo = command+name+repo+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
-                result = subprocess.run(hammer_enable_repo, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                if result.returncode == 0:
-                    print(SUCCESS+" Repository Enabled: "+repo)
-                    print(result.stdout)
-                    print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
-                else:
-                    print(FAIL+" Failed to enable repository: "+repo)
-                    print(result.stderr)
+            for repo in ENABLE_LEAPP_REPOS[basearch][sub_arch]["rhel7"]:
+                for version in ['7Server','7.9']:
+                    hammer_enable_repo = command+name+repo+' '+release+version+' '+basearch+arch+' '+org+str(org_id)
+                    result = subprocess.run(hammer_enable_repo, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    if result.returncode == 0:
+                        print(SUCCESS+" Repository Enabled: "+repo)
+                        print(result.stdout)
+                        print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
+                    else:
+                        print(FAIL+" Failed to enable repository: "+repo)
+                        print(result.stderr)
+                for repo in ENABLE_LEAPP_REPOS[basearch][sub_arch]["rhel8"]:
+                    hammer_enable_repo = command+name+repo+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
+                    result = subprocess.run(hammer_enable_repo, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    if result.returncode == 0:
+                        print(SUCCESS+" Repository Enabled: "+repo)
+                        print(result.stdout)
+                        print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
+                    else:
+                        print(FAIL+" Failed to enable repository: "+repo)
+                        print(result.stderr)
         else:
             print(FAIL+"Failed to determine if the system was Power8 or Power9, got "+sub_arch+" as returned Power version.")
     else:
