@@ -37,6 +37,50 @@ HOSTNAME = None
 SESSION = requests.Session()
 SUCCESS = '✅'
 FAIL = '❌'
+ENABLE_LEAPP_REPOS = {
+    "x86_64":{
+        "rhel7":[
+            "Red Hat Enterprise Linux 7 Server (RPMs)",
+            "Red Hat Enterprise Linux 7 Server - Extras (RPMs)"
+        ],
+        "rhel8":[
+            "Red Hat Enterprise Linux 8 for x86_64 - BaseOS (RPMs)",
+            "Red Hat Enterprise Linux 8 for x86_64 - AppStream (RPMs)"   
+        ]
+    },
+    "ppc64le":{
+        "power8":{
+            "rhel7":[
+                "Red Hat Enterprise Linux 7 for IBM Power LE (RPMs)",
+                "Red Hat Enterprise Linux 7 for IBM Power LE - Extras (RPMs)"
+            ],
+            "rhel8":[
+                "Red Hat Enterprise Linux 8 for Power, little endian - BaseOS (RPMs)",
+                "Red Hat Enterprise Linux 8 for Power, little endian - AppStream (RPMs)"
+            ]
+        },
+        "power9":{
+            "rhel7":[
+                "Red Hat Enterprise Linux 7 for POWER9 (RPMs)",
+                "Red Hat Enterprise Linux 7 for POWER9 - Extras (RPMs)"
+            ],
+            "rhel8":[
+                "Red Hat Enterprise Linux 8 for Power, little endian - BaseOS (RPMs)",
+                "Red Hat Enterprise Linux 8 for Power, little endian - AppStream (RPMs)"
+            ]
+        }
+    },
+    "s390x":{
+        "rhel7":[
+            "Red Hat Enterprise Linux 7 for System Z (RPMs)",
+            "Red Hat Enterprise Linux 7 for System Z - Extras (RPMs)"
+        ],
+        "rhel8":[
+            "Red Hat Enterprise Linux 8 for IBM z Systems - BaseOS (RPMs)",
+            "Red Hat Enterprise Linux 8 for IBM z Systems - AppStream (RPMs)"
+        ]
+    }
+}
 
 parser = argparse.ArgumentParser(description="A script to enable, sync, and update content views for clients looking to leapp")
 parser.add_argument("-c","--client", action='store', type=str, help="The registered hostname of the RHEL client\n\n\n\n")
@@ -118,7 +162,7 @@ def determine_leapp_repos(arch):
     elif arch == 'ppc64le':
         return RHEL_REPOS['ppc64le']
     else:
-        print(FAIL+" Architecture type not supported.")
+        print(FAIL+" Architecture type \""+arch+"\" not supported.")
         print("- Please review the supporte architectures in the documentation:")
         print("  - https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html-single/upgrading_from_rhel_7_to_rhel_8/index#planning-an-upgrade_upgrading-from-rhel-7-to-rhel-8")
 
@@ -154,24 +198,49 @@ def search_for_host():
         print("- Please provide a client value with the command")
         print("- Example: \"satellite_leapp_check -c client.example.com\"")
 
-def enable_leapp_repos(org_id, arch, releasever, leapp_repos):
+def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
     # Run commands to enable leapp_repos on the Satellite
     command = 'hammer repository-set enable '
     name = '--name '
     release = '--release '
     basearch = '--basearch '
     org = '--organization-id '
-    for repo in leapp_repos:
-        hammer_enable_repo = command+name+repo+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
-        result = subprocess.run(hammer_enable_repo, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode == 0:
-            print(SUCCESS+" Repository Enabled: "+repo)
-            print(result.stdout)
-            print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
+    if basearch == "ppc64le":
+        if sub_arch:
+            for repo in ENABLE_LEAPP_REPOS[basearch][sub_arch]:
+                hammer_enable_repo = command+name+repo+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
+                result = subprocess.run(hammer_enable_repo, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if result.returncode == 0:
+                    print(SUCCESS+" Repository Enabled: "+repo)
+                    print(result.stdout)
+                    print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
+                else:
+                    print(FAIL+" Failed to enable repository: "+repo)
+                    print(result.stderr)
         else:
-            print(FAIL+" Failed to enable repository: "+repo)
-            print(result.stderr)
-
+            print(FAIL+"Failed to determine if the system was Power8 or Power9, got "+sub_arch+" as returned Power version.")
+    else:
+        for repo in ENABLE_LEAPP_REPOS[basearch]["rhel7"]:
+            for version in ['7Server','7.9']:
+                hammer_enable_repo = command+name+repo+' '+release+version+' '+basearch+arch+' '+org+str(org_id)
+                result = subprocess.run(hammer_enable_repo, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if result.returncode == 0:
+                    print(SUCCESS+" Repository Enabled: "+repo)
+                    print(result.stdout)
+                    print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
+                else:
+                    print(FAIL+" Failed to enable repository: "+repo)
+                    print(result.stderr)
+        for repo in ENABLE_LEAPP_REPOS[basearch]["rhel8"]:
+            hammer_enable_repo = command+name+repo+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
+            result = subprocess.run(hammer_enable_repo, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode == 0:
+                print(SUCCESS+" Repository Enabled: "+repo)
+                print(result.stdout)
+                print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
+            else:
+                print(FAIL+" Failed to enable repository: "+repo)
+                print(result.stderr)
 def sync_leapp_repos(org_id, arch, releasever, leapp_repos):
     # Run commands to sync the leapp repos
     # Not available until RFE 2240648
