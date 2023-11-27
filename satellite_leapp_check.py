@@ -23,6 +23,7 @@ import argparse
 import socket
 import getpass
 import subprocess
+import configparser
 LEAPP_VERSION = None
 RHEL_s390x_REPOS = []
 RHEL_ppc64le_REPOS = []
@@ -113,13 +114,26 @@ def get_hostname():
     HOSTNAME = 'https://'+str(socket.getfqdn())
     return HOSTNAME
 
+def usage():
+    print()
+    print("This script is used in determining the availability of the correct repositories for a client for leapp upgrade")
+    print("This script currently only supports RHEL 7 to 8 upgrade for x86_64 Intel architecture")
+
 def get_leapp_version():
-    if args.version:
+    if args.version == '8.6' | args.version == '8.8' | args.version == '8.9' | args.version == '8.10':
         LEAPP_VERSION = args.version
-    else:
+    elif args.version == None:
         print(FAIL+" RHEL version to leapp to not supplied")
         print("- Please use the \"-v\" option to specify a RHEL version to leapp to")
-        print("- Example: -v 8.6")
+        print("- Example:")
+        print("  # python satellite_leapp_check.py -c client.example.com -v 8.6 -u admin -p password")
+    else:
+        print(FAIL+"Leapp version not known")
+        print("Leapp version should be either 8.6, 8.8, 8.9, or 8.10")
+        print("Please see the following article for supported leapp versions:")
+        print("- https://access.redhat.com/articles/4263361")
+        print("Your specified version is: "+str(args.version))
+        exit(1)
     return LEAPP_VERSION
 
 def determine_leapp_repos(arch):
@@ -368,6 +382,158 @@ def parse_for_organization(client):
     org_id = client['organization_id']
     return org_id
 
+def is_satellite(package_name):
+    import rpm
+    ts = rpm.TransactionSet()
+    try:
+        mi = ts.dbMatch('name', package_name)
+        if mi.count() > 0:
+            print(f"{package_name} is installed.")
+            return True
+        else:
+            print(f"{package_name} is not installed.")
+            return False
+    except rpm.error:
+        print("Error: Unable to determine RPM package status.")
+
+'''
+Be able to run on the client side to determine if the LEAPP repos are available
+we need to check:
+- Pull new sub-man certs to ensure all changes to certs are up2date
+- view the /etc/pki/entitlement/* certs for RHEL7/8/9 repos
+- advise on what to do based on results
+'''
+def sub_man_refresh():
+    try:
+        cmd = ['subscription-manager','refresh']
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        #o, e = proc.communicate()
+
+        if proc.returncode == 0:
+            #print(o.decode('UTF-8'))
+            return True
+        else:
+            #print(e.decode('UTF-8'))
+            return False
+    except requests.exceptions.RequestException as error:
+        print(FAIL+"The command 'subscription-manager refresh' returned an error!")
+        print(error)
+        return False
+    
+def release_unset():
+    cmd = ['subscription-manager','release','--unset']
+    subprocess.call(cmd, shell=True)
+    
+def get_os_major():
+    major = open('/etc/redhat-release','r').read().split(' ')[5].split('.')[0]
+    return major
+
+def get_release_versions():
+    cmd = ['subscription-manager','release','--list']
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    o,e = proc.communicate()
+    return o.decode('UTF-8')
+
+def verify_latest_release_avail(version):
+    cmd = ['subscription-manager','release','--set',version]
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        o,e = proc.communicate()
+
+        if proc.returncode == 0:
+            #print(o.decode('UTF-8'))
+            return True
+        else:
+            #print(e.decode('UTF-8'))
+            return False
+    except requests.exceptions.RequestException as error:
+        print(FAIL+"Checking for release version '"+version+"' failed")
+        print("The following releases are available for this client's repository set:")
+        print(get_release_versions())
+        print(e.decode('UTF-8'))
+        print(error)
+        exit(1)
+
+def enable_repos(major):
+    try:
+        if major == '7':
+            cmd = ['subscription-manager','repos','--enable','rhel-7-server-rpms','--enable','rhel-7-server-extras-rpms']
+            subprocess.call(cmd, shell=True)
+        elif major == '8':
+            cmd = ['subscription-manager','repos','--enable','rhel-8-for-x86_64-appstream-rpms','--enable','rhel-8-for-x86_64-baseos-rpms']
+            subprocess.call(cmd, shell=True)
+    except requests.exceptions.RequestException as error:
+        print(FAIL+"Failed to enable RHEL 7 repositories")
+        print(error)
+
+def determine_leapp_version_release_avail(LEAPP_VERSION):
+    releasever = get_release_versions()
+    LEAPP_VERSION_str = LEAPP_VERSION+'\n'
+    if LEAPP_VERSION_str in releasever:
+        return True
+    else:
+        print(FAIL+"Release version '"+LEAPP_VERSION+"' not found in available release versions:")
+        print(releasever)
+        exit(1)
+
+def repo_file_check(repo_label):
+    try:
+        config = configparser.ConfigParser()
+        config.read('/etc/yum.repos.d/redhat.repo')
+        rh_repo_conf = {}
+        rh_repo_conf['sslclientcert'] = config[repo_label]['sslclientcert']
+        rh_repo_conf['sslclientkey'] = config[repo_label]['sslclientkey']
+        rh_repo_conf['sslcacert'] = config[repo_label]['sslcacert']
+        rh_repo_conf['serverurl'] = config[repo_label]['baseurl'][:config[repo_label]['baseurl'].find("dist")]
+        return rh_repo_conf
+    except requests.exceptions.RequestException as error:
+        print(FAIL+"Failed to parse file /etc/yum.repos.d/redhat.repo")
+        print(error)
+        exit(1)
+
+def check_leapp_repos_content(LEAPP_VERSION):
+    try:
+        if LEAPP_VERSION in ['8.6','8.8','8.9','8.10']:
+            rh_repo_conf = repo_file_check('rhel-7-server-rpms')
+            for repo in ['appstream','baseos']:
+                response = SESSION.get(rh_repo_conf['serverurl']+
+                                    'dist/rhel8/'+LEAPP_VERSION+'/x86_64/'+repo+'/os/repodata/repomd.xml',
+                                    verify="/root/ssl-build/katello-server-ca.crt",
+                                    cert=(rh_repo_conf['sslclientcert'],rh_repo_conf['sslclientkey']))
+                if response.status_code != '200':
+                    print(FAIL+"Failed to retrieve the repomd.xml from the "+repo+" repository")
+                else:
+                    return response
+    except requests.exceptions.RequestException as error:
+        print(error)
+        exit(1)
+
+def check_client():
+    LEAPP_VERSION = get_leapp_version()
+    if sub_man_refresh():
+        release_unset()
+        major = get_os_major()
+        if major == '7':
+            verify_latest_release_avail('7Server')
+            enable_repos(major)
+            determine_leapp_version_release_avail(LEAPP_VERSION)
+            check_leapp_repos_content(LEAPP_VERSION)
+        elif major == '8':
+            verify_latest_release_avail('8')
+            enable_repos(major)
+            determine_leapp_version_release_avail(LEAPP_VERSION)
+            check_leapp_repos_content(LEAPP_VERSION)
+        else:
+            print(FAIL+"OS major version can not be determined")
+            print("OS major release determined from /etc/os-release file")
+            print("Found the following as the major release version from this file:")
+            print(major)
+    else:
+        exit(1)
+    print(SUCCESS+"Your client is ready to Leapp!")
+
+
+
 '''
 Check client for the following infractions based on arch
 - RHEL major version
@@ -433,10 +599,17 @@ def parse_client():
 
 
 def main():
-    get_username()
-    get_password()
-    get_hostname()
-    parse_client()
+    usage()
+    if is_satellite('satellite'):
+        get_username()
+        get_password()
+        get_hostname()
+        parse_client()
+    else:
+        print("No satellite package found, assuming this server is a client")
+        get_leapp_version
+        check_client()
+
 
 
 if __name__ == "__main__":
