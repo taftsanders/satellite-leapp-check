@@ -210,6 +210,7 @@ def search_for_host():
         print(FAIL+" No client value given")
         print("- Please provide a client value with the command")
         print("- Example: \"satellite_leapp_check -c client.example.com\"")
+        exit(1)
 
 def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
     # Run commands to enable leapp_repos on the Satellite
@@ -320,7 +321,7 @@ def check_cv_for_leapp_repos(cv,leapp_repos):
         print(FAIL+" Content View ("+HOSTNAME+"/content_views/"+str(cv_info['content_view_id'])+"#/versions) is missing the following repositories:")
         for repo in missing_repos:
             print(" - "+repo)
-        exit
+        exit(1)
     else:
         return True
     
@@ -347,7 +348,7 @@ def check_repos_for_content(cv_id,leapp_repos,client_lce):
         print("- Which means that the repository wasn't synced before the content view was published")
         print("- Please sync these repos again and publish a new version of the content view: "+cv_info['content_view']['name'])
         print("- Then promote the new version to the client's lifecycle: "+client_lce)
-        exit
+        exit(1)
     else:
         return True
 
