@@ -394,18 +394,29 @@ def parse_for_organization(client):
     return org_id
 
 def is_satellite(package_name):
-    import rpm
-    ts = rpm.TransactionSet()
     try:
-        mi = ts.dbMatch('name', package_name)
-        if mi.count() > 0:
-            print(f"{package_name} is installed.")
+        import rpm
+        ts = rpm.TransactionSet()
+        try:
+            mi = ts.dbMatch('name', package_name)
+            if mi.count() > 0:
+                print(f"{package_name} is installed.")
+                return True
+            else:
+                print(f"{package_name} is not installed.")
+                return False
+        except rpm.error:
+            print("Error: Unable to determine RPM package status.")
+    except ModuleNotFoundError:
+        #check for satelite-maintain command
+        import os
+        is_satellite = os.path.exists('/usr/bin/satellite-maintain')
+        if is_satellite:
+            print(f"Satellite is installed")
             return True
         else:
-            print(f"{package_name} is not installed.")
+            print("Satellite is not installed")
             return False
-    except rpm.error:
-        print("Error: Unable to determine RPM package status.")
 
 '''
 Be able to run on the client side to determine if the LEAPP repos are available
