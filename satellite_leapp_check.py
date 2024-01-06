@@ -20,10 +20,11 @@ upgrade to be available in a content view is:
 
 import requests
 import argparse
+import configparser
 import socket
 import getpass
 import subprocess
-import configparser
+
 LEAPP_VERSION = None
 RHEL_s390x_REPOS = []
 RHEL_ppc64le_REPOS = []
@@ -530,6 +531,12 @@ def check_leapp_repos_content(LEAPP_VERSION):
     except requests.exceptions.RequestException as error:
         print(error)
         exit(1)
+
+def resolve_rhsm_hostname():
+    return
+
+def reach_rhsm_hostname():
+    return
 
 def check_client():
     LEAPP_VERSION = get_leapp_version()
