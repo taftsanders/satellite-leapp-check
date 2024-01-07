@@ -24,6 +24,7 @@ import configparser
 import socket
 import getpass
 import subprocess
+from urllib3.exceptions import InsecureRequestWarning
 
 LEAPP_VERSION = None
 RHEL_s390x_REPOS = []
@@ -564,6 +565,7 @@ def check_client():
     print(SUCCESS+"Your client is ready to Leapp!")
 
 def resolve_rhsm_hostname():
+    requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
     try:
         config = configparser.ConfigParser()
         config.read('/etc/rhsm/rhsm.conf')
