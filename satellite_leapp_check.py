@@ -533,26 +533,27 @@ def check_leapp_repos_content(LEAPP_VERSION):
 
 def check_client():
     LEAPP_VERSION = get_leapp_version()
-    if sub_man_refresh():
-        release_unset()
-        major = get_os_major()
-        if major == '7':
-            verify_latest_release_avail('7Server')
-            enable_repos(major)
-            determine_leapp_version_release_avail(LEAPP_VERSION)
-            check_leapp_repos_content(LEAPP_VERSION)
-        elif major == '8':
-            verify_latest_release_avail('8')
-            enable_repos(major)
-            determine_leapp_version_release_avail(LEAPP_VERSION)
-            check_leapp_repos_content(LEAPP_VERSION)
+    if resolve_rhsm_hostname():
+        if sub_man_refresh():
+            release_unset()
+            major = get_os_major()
+            if major == '7':
+                verify_latest_release_avail('7Server')
+                enable_repos(major)
+                determine_leapp_version_release_avail(LEAPP_VERSION)
+                check_leapp_repos_content(LEAPP_VERSION)
+            elif major == '8':
+                verify_latest_release_avail('8')
+                enable_repos(major)
+                determine_leapp_version_release_avail(LEAPP_VERSION)
+                check_leapp_repos_content(LEAPP_VERSION)
+            else:
+                print(FAIL+"OS major version can not be determined")
+                print("OS major release determined from /etc/os-release file")
+                print("Found the following as the major release version from this file:")
+                print(major)
         else:
-            print(FAIL+"OS major version can not be determined")
-            print("OS major release determined from /etc/os-release file")
-            print("Found the following as the major release version from this file:")
-            print(major)
-    else:
-        exit(1)
+            exit(1)
     print(SUCCESS+"Your client is ready to Leapp!")
 
 def resolve_rhsm_hostname():
