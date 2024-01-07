@@ -540,29 +540,56 @@ def reach_rhsm_hostname():
 
 def check_client():
     LEAPP_VERSION = get_leapp_version()
-    if sub_man_refresh():
-        release_unset()
-        major = get_os_major()
-        if major == '7':
-            verify_latest_release_avail('7Server')
-            enable_repos(major)
-            determine_leapp_version_release_avail(LEAPP_VERSION)
-            check_leapp_repos_content(LEAPP_VERSION)
-        elif major == '8':
-            verify_latest_release_avail('8')
-            enable_repos(major)
-            determine_leapp_version_release_avail(LEAPP_VERSION)
-            check_leapp_repos_content(LEAPP_VERSION)
+    if resolve_rhsm_hostname():
+        if sub_man_refresh():
+            release_unset()
+            major = get_os_major()
+            if major == '7':
+                verify_latest_release_avail('7Server')
+                enable_repos(major)
+                determine_leapp_version_release_avail(LEAPP_VERSION)
+                check_leapp_repos_content(LEAPP_VERSION)
+            elif major == '8':
+                verify_latest_release_avail('8')
+                enable_repos(major)
+                determine_leapp_version_release_avail(LEAPP_VERSION)
+                check_leapp_repos_content(LEAPP_VERSION)
+            else:
+                print(FAIL+"OS major version can not be determined")
+                print("OS major release determined from /etc/os-release file")
+                print("Found the following as the major release version from this file:")
+                print(major)
         else:
-            print(FAIL+"OS major version can not be determined")
-            print("OS major release determined from /etc/os-release file")
-            print("Found the following as the major release version from this file:")
-            print(major)
-    else:
-        exit(1)
+            exit(1)
     print(SUCCESS+"Your client is ready to Leapp!")
 
-
+def resolve_rhsm_hostname():
+    try:
+        config = configparser.ConfigParser()
+        config.read('/etc/rhsm/rhsm.conf')
+        hostname = config['server']['hostname']
+    except:
+        print('Failed to read "hostname" from /etc/rhsm/rhsm.conf')
+        print('Please verify the /etc/rhsm/rhsm.conf file is present')
+        print('and that the hostname variable has a value.')
+        exit(1)
+    try:
+        if hostname == 'subscription.rhsm.redhat.com' or hostname == 'subscription.rhn.redhat.com':
+            prefix = '/subscription'
+            response = requests.get('https://'+hostname+prefix, verify=False)
+        else:
+            prefix = '/rhsm'
+            response = requests.get('https://'+hostname+prefix, verify=False)
+        if response.status_code == 200:
+            print(f'Server receieved HTTP {response.status_code} when trying to connect, continuing...')
+            return True
+        else:
+            print(f'Error: Server receieved HTTP {response.status_code} when trying to connect to https://'+hostname+prefix)
+            exit(1)
+    except:
+        print(f'Server encountered an error when trying to {hostname}')
+        print('Please check your network connection and try again')
+        exit(1)
 
 '''
 Check client for the following infractions based on arch
@@ -630,14 +657,14 @@ def parse_client():
 
 def main():
     usage()
-    if is_satellite('satellite'):
+    if is_satellite('satellite-installer'):
         get_username()
         get_password()
         get_hostname()
         parse_client()
     else:
         print("No satellite package found, assuming this server is a client")
-        get_leapp_version
+        get_leapp_version()
         check_client()
 
 
