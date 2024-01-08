@@ -40,6 +40,7 @@ HOSTNAME = None
 SESSION = requests.Session()
 SUCCESS = '✅'
 FAIL = '❌'
+RHEL_8_VERSIONS = ['8.6','8.8','8.9','8.10']
 ENABLE_LEAPP_REPOS = {
     "x86_64":{
         "rhel7":[
@@ -124,22 +125,32 @@ def usage():
     print("This script currently only supports RHEL 7 to 8 upgrade for x86_64 Intel architecture")
     print()
 
-def get_leapp_version():
-    if args.version == '8.6' or args.version == '8.8' or args.version == '8.9' or args.version == '8.10':
-        LEAPP_VERSION = args.version
-    elif args.version == None:
-        print(FAIL+" RHEL version to leapp to not supplied")
-        print("\tPlease use the \"-v\" option to specify a RHEL version to leapp to")
-        print("\tExample:")
-        print("\t# python satellite_leapp_check.py -c client.example.com -v 8.6 -u admin -p password")
+def get_leapp_version(LEAPP_VERSION=None):
+    global RHEL_8_VERSIONS
+    if args.version:
+        if args.version in RHEL_8_VERSIONS:
+            LEAPP_VERSION = args.version
+        else:
+            print(FAIL+"Leapp version not known")
+            print("\tLeapp version should be either 8.6, 8.8, 8.9, or 8.10")
+            print("\tPlease see the following article for supported leapp versions:")
+            print("\thttps://access.redhat.com/articles/4263361")
+            print("\tYou specified version: "+str(args.version))
+            exit(1)
     else:
-        print(FAIL+"Leapp version not known")
-        print("\tLeapp version should be either 8.6, 8.8, 8.9, or 8.10")
-        print("\tPlease see the following article for supported leapp versions:")
-        print("\thttps://access.redhat.com/articles/4263361")
-        print("\tYour specified version is: "+str(args.version))
-        exit(1)
-    return LEAPP_VERSION
+        print("\nLeapp version should be either '8.6', '8.8', '8.9', or '8.10'")
+        while not LEAPP_VERSION:
+            LEAPP_VERSION = input('\tEnter the RHEL version you plan to leapp to: ')
+            print('\n')
+            if str(LEAPP_VERSION) in RHEL_8_VERSIONS:
+                break
+            else:
+                print(FAIL+'\nYou have entered '+LEAPP_VERSION)
+                print('This version of RHEL is not found in the expected Leapp versions')
+                print('Please try again\n')
+                LEAPP_VERSION = None
+                continue
+        return LEAPP_VERSION
 
 def determine_leapp_repos(arch):
     # using the arch type, determine what repos are needed
@@ -335,13 +346,12 @@ def check_repos_for_content(cv_id,leapp_repos,client_lce):
     endpoint = '/katello/api/content_view_versions/'+str(cv_id)
     cv_call = api_call(HOSTNAME+endpoint, USERNAME, PASSWORD)
     cv_info = cv_call.json()
-    repos = cv_info['repositories']
-    for repo in repos:
+    empty_repos = []
+    for repo in cv_info['repositories']:
         if repo['name'] in leapp_repos:
             endpoint = '/katello/api/repositories/'+str(repo['id'])
             repo_content_call = api_call(HOSTNAME+endpoint,USERNAME,PASSWORD)
             repo_content = repo_content_call.json()
-            empty_repos = []
             if repo_content['content_counts']['rpm'] == 0:
                 empty_repos.append(repo['name'])
             else:
