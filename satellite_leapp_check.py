@@ -118,23 +118,26 @@ def get_hostname():
 
 def usage():
     print()
+    print('Thanks for using satellite_leapp_check.')
+    print('Please report all bugs or issues found to https://github.com/taftsanders/satellite-leapp-check/issues')
     print("This script is used in determining the availability of the correct repositories for a client for leapp upgrade")
     print("This script currently only supports RHEL 7 to 8 upgrade for x86_64 Intel architecture")
+    print()
 
 def get_leapp_version():
     if args.version == '8.6' or args.version == '8.8' or args.version == '8.9' or args.version == '8.10':
         LEAPP_VERSION = args.version
     elif args.version == None:
         print(FAIL+" RHEL version to leapp to not supplied")
-        print("- Please use the \"-v\" option to specify a RHEL version to leapp to")
-        print("- Example:")
-        print("  # python satellite_leapp_check.py -c client.example.com -v 8.6 -u admin -p password")
+        print("\tPlease use the \"-v\" option to specify a RHEL version to leapp to")
+        print("\tExample:")
+        print("\t# python satellite_leapp_check.py -c client.example.com -v 8.6 -u admin -p password")
     else:
         print(FAIL+"Leapp version not known")
-        print("Leapp version should be either 8.6, 8.8, 8.9, or 8.10")
-        print("Please see the following article for supported leapp versions:")
-        print("- https://access.redhat.com/articles/4263361")
-        print("Your specified version is: "+str(args.version))
+        print("\tLeapp version should be either 8.6, 8.8, 8.9, or 8.10")
+        print("\tPlease see the following article for supported leapp versions:")
+        print("\thttps://access.redhat.com/articles/4263361")
+        print("\tYour specified version is: "+str(args.version))
         exit(1)
     return LEAPP_VERSION
 
@@ -178,8 +181,8 @@ def determine_leapp_repos(arch):
         return RHEL_REPOS['ppc64le']
     else:
         print(FAIL+" Architecture type \""+arch+"\" not supported.")
-        print("- Please review the supporte architectures in the documentation:")
-        print("  - https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html-single/upgrading_from_rhel_7_to_rhel_8/index#planning-an-upgrade_upgrading-from-rhel-7-to-rhel-8")
+        print("\tPlease review the supporte architectures in the documentation:")
+        print("\thttps://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html-single/upgrading_from_rhel_7_to_rhel_8/index#planning-an-upgrade_upgrading-from-rhel-7-to-rhel-8")
 
 
 
@@ -202,6 +205,7 @@ def api_call(url, username, password):
 def search_for_host():
     # Make the call for the client value on the Satellite
     if args.client:
+        print('Searching for host '+args.client)
         endpoint = '/api/hosts/'
         try:
             client = api_call(HOSTNAME+endpoint+args.client, USERNAME, PASSWORD)
@@ -210,8 +214,8 @@ def search_for_host():
         return client.json()
     else:
         print(FAIL+" No client value given")
-        print("- Please provide a client value with the command")
-        print("- Example: \"satellite_leapp_check -c client.example.com\"")
+        print("\tPlease provide a client value with the command")
+        print("\tExample: \"satellite_leapp_check -c client.example.com\"")
         exit(1)
 
 def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
@@ -346,10 +350,14 @@ def check_repos_for_content(cv_id,leapp_repos,client_lce):
             continue
     if len(empty_repos) > 0:
         print(FAIL+" The following repos were found to have 0 RPMs")
-        print("- "+empty_repos)
-        print("- Which means that the repository wasn't synced before the content view was published")
-        print("- Please sync these repos again and publish a new version of the content view: "+cv_info['content_view']['name'])
-        print("- Then promote the new version to the client's lifecycle: "+client_lce)
+        for repo in empty_repos:
+            print('\t- '+repo)
+        if cv_info['content_view']['name'] != 'Default Organization View':
+            print("\tWhich means that the repository wasn't synced before the content view was published")
+            print("- Please sync these repos again and publish a new version of the content view: "+cv_info['content_view']['name'])
+            print("- Then promote the new version to the client's lifecycle: "+client_lce)
+        else:
+            print('Please sync the repositories listed above again.')
         exit(1)
     else:
         return True
@@ -370,8 +378,12 @@ def parse_for_compliance(client):
         return 'Entitlement'
 
 def parse_for_arch(client):
-    arch = client['architecture_name']
-    return arch
+    try:
+        arch = client['architecture_name']
+        return arch
+    except:
+        print(FAIL+'Failed to detect architecture name from Satellite\'s API response')
+        exit(1)
 
 def parse_for_major_version(client):
     if client['facts']:
@@ -415,10 +427,10 @@ def is_satellite(package_name):
         import os
         is_satellite = os.path.exists('/usr/bin/satellite-maintain')
         if is_satellite:
-            print(f"Satellite is installed")
+            #print(f"Satellite is installed")
             return True
         else:
-            print("Satellite is not installed")
+            #print("Satellite is not installed ")
             return False
 
 '''
@@ -557,9 +569,9 @@ def check_client():
                 check_leapp_repos_content(LEAPP_VERSION)
             else:
                 print(FAIL+"OS major version can not be determined")
-                print("OS major release determined from /etc/os-release file")
-                print("Found the following as the major release version from this file:")
-                print(major)
+                print("\tOS major release determined from /etc/os-release file")
+                print("\tFound the following as the major release version from this file:")
+                print('\t'+major)
         else:
             exit(1)
     print(SUCCESS+"Your client is ready to Leapp!")
@@ -571,9 +583,9 @@ def resolve_rhsm_hostname():
         config.read('/etc/rhsm/rhsm.conf')
         hostname = config['server']['hostname']
     except:
-        print('Failed to read "hostname" from /etc/rhsm/rhsm.conf')
-        print('Please verify the /etc/rhsm/rhsm.conf file is present')
-        print('and that the hostname variable has a value.')
+        print(FAIL+'Failed to read "hostname" from /etc/rhsm/rhsm.conf')
+        print('\tPlease verify the /etc/rhsm/rhsm.conf file is present')
+        print('\tand that the hostname variable has a value.')
         exit(1)
     try:
         if hostname == 'subscription.rhsm.redhat.com' or hostname == 'subscription.rhn.redhat.com':
@@ -583,14 +595,14 @@ def resolve_rhsm_hostname():
             prefix = '/rhsm'
             response = requests.get('https://'+hostname+prefix, verify=False)
         if response.status_code == 200:
-            print(f'Server receieved HTTP {response.status_code} when trying to connect, continuing...')
+            print(SUCCESS+f'Server receieved HTTP {response.status_code} when trying to connect, continuing...')
             return True
         else:
-            print(f'Error: Server receieved HTTP {response.status_code} when trying to connect to https://'+hostname+prefix)
+            print(FAIL+f'Error: Server receieved HTTP {response.status_code} when trying to connect to https://'+hostname+prefix)
             exit(1)
     except:
-        print(f'Server encountered an error when trying to {hostname}')
-        print('Please check your network connection and try again')
+        print(FAIL+f'Server encountered an error when trying to {hostname}')
+        print('\tPlease check your network connection and try again')
         exit(1)
 
 '''
@@ -660,6 +672,8 @@ def parse_client():
 def main():
     usage()
     if is_satellite('satellite-installer'):
+        print('satellite-installer package detected on executing server')
+        print('Calling the Satellite API for information on the specified client')
         get_username()
         get_password()
         get_hostname()
