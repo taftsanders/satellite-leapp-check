@@ -195,8 +195,7 @@ def determine_leapp_repos(arch):
         print(FAIL+" Architecture type \""+arch+"\" not supported.")
         print("\tPlease review the supporte architectures in the documentation:")
         print("\thttps://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html-single/upgrading_from_rhel_7_to_rhel_8/index#planning-an-upgrade_upgrading-from-rhel-7-to-rhel-8")
-
-
+        exit(1)
 
 def api_call(url, username, password):
     # given the url, username and password make the API call
@@ -210,6 +209,7 @@ def api_call(url, username, password):
             print(FAIL+" A request test to the Satellite at: https://"+
                   str(socket.getfqdn())+" failed with the following error: ")
             print(f"An error occurred: {error}")
+            exit(1)
     SESSION.auth = (username, password)
     response = SESSION.get(url, verify="/root/ssl-build/katello-server-ca.crt")
     return response
@@ -253,6 +253,7 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                         else:
                             print(FAIL+" Failed to enable repository: "+repo)
                             print(result.stderr.decode('UTF-8'))
+                            exit(1)
                 for repo in ENABLE_LEAPP_REPOS[arch][sub_arch]["rhel8"]:
                     hammer_enable_repo = command+name+'"'+repo+'"'+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
                     result = subprocess.run(hammer_enable_repo, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -266,8 +267,10 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                         else:
                             print(FAIL+" Failed to enable repository: "+repo)
                             print(result.stderr.decode('UTF-8'))
+                            exit(1)
         else:
             print(FAIL+"Failed to determine if the system was Power8 or Power9, got "+sub_arch+" as returned Power version.")
+            exit(1)
     else:
         for repo in ENABLE_LEAPP_REPOS[arch]["rhel7"]:
             for version in ['7Server']:
@@ -283,6 +286,7 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                     else:
                         print(FAIL+" Failed to enable repository: "+repo)
                         print(result.stderr.decode('UTF-8'))
+                        exit(1)
         for repo in ENABLE_LEAPP_REPOS[arch]["rhel8"]:
             hammer_enable_repo = command+name+'"'+repo+'"'+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
             result = subprocess.run(hammer_enable_repo, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -296,6 +300,7 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                 else:
                     print(FAIL+" Failed to enable repository: "+repo)
                     print(result.stderr.decode('UTF-8'))
+                    exit(1)
 def sync_leapp_repos(org_id, arch, releasever, leapp_repos):
     # Run commands to sync the leapp repos
     # Not available until RFE 2240648
@@ -367,6 +372,7 @@ def check_repos_for_content(cv_id,leapp_repos,client_lce):
             print("\tWhich means that the repository wasn't synced before the content view was published")
             print("- Please sync these repos again and publish a new version of the content view: "+cv_info['content_view']['name'])
             print("- Then promote the new version to the client's lifecycle: "+client_lce)
+            exit(1)
         else:
             print('Please sync the repositories listed above again.')
         exit(1)
@@ -403,11 +409,13 @@ def parse_for_major_version(client):
             return int(major)
         except KeyError:
             print(FAIL+" 'distribution::version' fact not present on the system")
+            exit(1)
     else:
         print(FAIL+" Client Facts are empty")
         print("- Please check if the client is registered and that the client's facts have been updated")
         print("- You can update the facts by running the following command on the client:")
         print("    subscription-manager facts --update")
+        exit(1)
 
 def parse_for_minor_version(client): 
     dist_version = client['facts']['distribution::version']
@@ -512,6 +520,7 @@ def enable_repos(major):
     except requests.exceptions.RequestException as error:
         print(FAIL+"Failed to enable RHEL 7 repositories")
         print(error)
+        exit(1)
 
 def determine_leapp_version_release_avail(LEAPP_VERSION):
     releasever = get_release_versions()
@@ -549,6 +558,7 @@ def check_leapp_repos_content(LEAPP_VERSION):
                                     cert=(rh_repo_conf['sslclientcert'],rh_repo_conf['sslclientkey']))
                 if response.status_code != '200':
                     print(FAIL+"Failed to retrieve the repomd.xml from the "+repo+" repository")
+                    exit(1)
                 else:
                     return response
     except requests.exceptions.RequestException as error:
@@ -582,6 +592,7 @@ def check_client():
                 print("\tOS major release determined from /etc/os-release file")
                 print("\tFound the following as the major release version from this file:")
                 print('\t'+major)
+                exit(1)
         else:
             exit(1)
     print(SUCCESS+"Your client is ready to Leapp!")
@@ -638,6 +649,7 @@ def parse_client():
             minor = parse_for_minor_version(client)
             if minor < 9:
                 print(FAIL+" RHEL 7.\""+str(minor)+"\" is not the lastest version, please update to version 7.9 before trying to leapp to RHEL 8")
+                exit(1)
             else:
                 org_id = parse_for_organization(client)
                 if check_org_for_leapp_repos(org_id,leapp_repos):
@@ -683,7 +695,7 @@ def parse_client():
                 print('\t- '+str(version))
             print(f'\tSatellite API shows your client\'s major version as {major_version}')
             print("\tCheck the client's facts for a 'distribution::version")
-
+            exit(1)
 
 def main():
     usage()
