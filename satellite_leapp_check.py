@@ -40,6 +40,7 @@ HOSTNAME = None
 SESSION = requests.Session()
 SUCCESS = '✅'
 FAIL = '❌'
+LEAPP_MAJOR_RHEL_VERSIONS = [6,7,8]
 RHEL_8_VERSIONS = ['8.6','8.8','8.9','8.10']
 ENABLE_LEAPP_REPOS = {
     "x86_64":{
@@ -398,8 +399,7 @@ def parse_for_arch(client):
 def parse_for_major_version(client):
     if client['facts']:
         try:
-            dist_version = client['facts']['distribution::version']
-            major = dist_version[0]
+            major = client['facts']['distribution::version'][0]
             return int(major)
         except KeyError:
             print(FAIL+" 'distribution::version' fact not present on the system")
@@ -631,7 +631,9 @@ def parse_client():
     arch = parse_for_arch(client)
     if arch == 'x86_64':
         leapp_repos = determine_leapp_repos(arch)
-        if parse_for_major_version(client) == 7:
+        global LEAPP_MAJOR_RHEL_VERSIONS
+        major_version = parse_for_major_version(client)
+        if major_version in LEAPP_MAJOR_RHEL_VERSIONS:
             print(SUCCESS+" RHEL 7 version detected")
             minor = parse_for_minor_version(client)
             if minor < 9:
@@ -675,8 +677,12 @@ def parse_client():
                             if check_repos_for_content(cv_id,leapp_repos,client_lce):
                                 print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
         else:
-            print(FAIL+" Version detection failed")
-            print("- Check the client's facts for a 'distribution::version")
+            print(FAIL+" Required major version detection failed")
+            print('\tMajor version should be:')
+            for version in LEAPP_MAJOR_RHEL_VERSIONS:
+                print('\t- '+str(version))
+            print(f'\tSatellite API shows your client\'s major version as {major_version}')
+            print("\tCheck the client's facts for a 'distribution::version")
 
 
 def main():
