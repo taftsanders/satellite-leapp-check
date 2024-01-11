@@ -126,11 +126,11 @@ def usage():
     print("This script currently only supports RHEL 7 to 8 upgrade for x86_64 Intel architecture")
     print()
 
-def get_leapp_version(LEAPP_VERSION=None):
+def get_leapp_version():
     global RHEL_8_VERSIONS
     if args.version:
         if args.version in RHEL_8_VERSIONS:
-            LEAPP_VERSION = args.version
+            return args.version
         else:
             print(FAIL+"Leapp version not known")
             print("\tLeapp version should be either 8.6, 8.8, 8.9, or 8.10")
