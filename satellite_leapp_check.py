@@ -1,3 +1,4 @@
+#! /usr/bin/python3
 """
 At the time of this writing the required repos for RHEL7 to RHEL 8 LEAPP 
 upgrade to be available in a content view is:
@@ -26,6 +27,7 @@ import getpass
 import subprocess
 from urllib3.exceptions import InsecureRequestWarning
 
+UPGRADE_TO_VERSION = None
 LEAPP_VERSION = None
 RHEL_s390x_REPOS = []
 RHEL_ppc64le_REPOS = []
@@ -140,11 +142,13 @@ def get_leapp_version(LEAPP_VERSION=None):
             exit(1)
     else:
         print("\nLeapp version should be either '8.6', '8.8', '8.9', or '8.10'")
+        global UPGRADE_TO_VERSION
         while not LEAPP_VERSION:
             LEAPP_VERSION = input('\tEnter the RHEL version you plan to leapp to: ')
             print('\n')
             if str(LEAPP_VERSION) in RHEL_8_VERSIONS:
-                break
+                UPGRADE_TO_VERSION = str(LEAPP_VERSION)
+                continue
             else:
                 print(FAIL+'\nYou have entered '+LEAPP_VERSION)
                 print('This version of RHEL is not found in the expected Leapp versions')
@@ -380,7 +384,11 @@ def check_repos_for_content(cv_id,leapp_repos,client_lce):
         return True
 
 def parse_for_content_view(client):
-    content_view = client['content_facet_attributes']['content_view_name']
+    # Satellite 6.14 API changed from content_view_name to content_view['name']
+    if client.get('content_facet_attributes').get('content_view_name'):
+        content_view = client.get('content_facet_attributes').get('content_view_name')
+    elif client.get('content_facet_attributes').get('content_view').get('name'):
+        content_view = client.get('content_facet_attributes').get('content_view').get('name')
     content_view_version_id = client['content_facet_attributes']['content_view_version_id']
     if content_view == "Default Organization View":
         return content_view,content_view_version_id
@@ -637,8 +645,18 @@ If Organization doesn't have leapp repos enabled
 - enable the required repos
 - sync the newly enabled repos
 '''
+
+def get_client_lce(client):
+# Satellite 6.14 API changed from content_view_name to content_view['name']
+    if client.get('content_facet_attributes').get('lifecycle_environment_name'):
+        client_lce = client['content_facet_attributes']['lifecycle_environment_name']
+    elif client.get('content_facet_attributes').get('lifecycle_environment').get('name'):
+        client_lce = client['content_facet_attributes']['lifecycle_environment']['name']
+    return client_lce
+
 def parse_client():
     client = search_for_host()
+    client_lce = get_client_lce(client)
     arch = parse_for_arch(client)
     if arch == 'x86_64':
         leapp_repos = determine_leapp_repos(arch)
@@ -660,17 +678,15 @@ def parse_client():
                         if check_cv_for_leapp_repos(cv_id,leapp_repos):
                             print(SUCCESS+" Content View Version ID "+cv+" has the required repositories for leapp upgrade")
                             print("Checking that the repos contain content")
-                            client_lce = client['content_facet_attributes']['lifecycle_environment_name']
                             if check_repos_for_content(cv_id,leapp_repos,client_lce):
                                 print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
                     else:
                         print("You are using the Default Organization View")
                         print("Checking that the repos contain content")
-                        client_lce = client['content_facet_attributes']['lifecycle_environment_name']
                         if check_repos_for_content(cv_id,leapp_repos,client_lce):
                             print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
                 else:
-                    enable_leapp_repos(org_id, arch, args.version, leapp_repos)
+                    enable_leapp_repos(org_id, arch, UPGRADE_TO_VERSION, leapp_repos)
                     if check_org_for_leapp_repos(org_id,leapp_repos):
                         print(SUCCESS+" Organization ID "+str(org_id)+" has the required repos enabled")
                         print("Checking client's content view for repo availability")
@@ -679,13 +695,11 @@ def parse_client():
                             if check_cv_for_leapp_repos(cv_id,leapp_repos):
                                 print(SUCCESS+" Content View Version ID "+cv+" has the required repositories for leapp upgrade")
                                 print("Checking that the repos contain content")
-                                client_lce = client['content_facet_attributes']['lifecycle_environment_name']
-                                if check_repos_for_content(cv_id,leapp_repos,client_lce):
-                                    print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
+                            if check_repos_for_content(cv_id,leapp_repos,client_lce):
+                                print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
                         else:
                             print("You are using the Default Organization View")
                             print("Checking that the repos contain content")
-                            client_lce = client['content_facet_attributes']['lifecycle_environment_name']
                             if check_repos_for_content(cv_id,leapp_repos,client_lce):
                                 print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
         else:
