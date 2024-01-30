@@ -146,5 +146,28 @@ Please sync the repositories listed above again.
 
 ### Example of running the script non-interactively from a Satellite server
 ```
+[root@bombsat614 ~]# ./satellite_leapp_check.py -c drone79.usersys.redhat.com -u admin -p redhat -v 8.6
 
+Thanks for using satellite_leapp_check.
+Please report all bugs or issues found to https://github.com/taftsanders/satellite-leapp-check/issues
+This script is used in determining the availability of the correct repositories for a client for leapp upgrade
+This script currently only supports RHEL 7 to 8 upgrade for x86_64 Intel architecture
+
+satellite-installer package detected on executing server
+Calling the Satellite API for information on the specified client
+Searching for host drone79.usersys.redhat.com
+✅ RHEL 7 version detected
+❌ Organization ID 1 is missing Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs 8.6
+✅ Repository Enabled: Red Hat Enterprise Linux 8 for x86_64 - BaseOS (RPMs)
+Please sync this repository before attempting to include it in any content view or accessing it via a client
+✅ Repository Enabled: Red Hat Enterprise Linux 8 for x86_64 - AppStream (RPMs)
+Please sync this repository before attempting to include it in any content view or accessing it via a client
+✅ Organization ID 1 has the required repos enabled
+Checking client's content view for repo availability
+You are using the Default Organization View
+Checking that the repos contain content
+❌ The following repos were found to have 0 RPMs
+        - Red Hat Enterprise Linux 8 for x86_64 - AppStream RPMs 8.6
+        - Red Hat Enterprise Linux 8 for x86_64 - BaseOS RPMs 8.6
+Please sync the repositories listed above again.
 ```
