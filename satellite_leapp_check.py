@@ -27,7 +27,6 @@ import getpass
 import subprocess
 from urllib3.exceptions import InsecureRequestWarning
 
-UPGRADE_TO_VERSION = None
 LEAPP_VERSION = None
 RHEL_s390x_REPOS = []
 RHEL_ppc64le_REPOS = []
@@ -128,11 +127,12 @@ def usage():
     print("This script currently only supports RHEL 7 to 8 upgrade for x86_64 Intel architecture")
     print()
 
-def get_leapp_version(LEAPP_VERSION=None):
+def get_leapp_version():
     global RHEL_8_VERSIONS
     if args.version:
         if args.version in RHEL_8_VERSIONS:
             LEAPP_VERSION = args.version
+            return LEAPP_VERSION
         else:
             print(FAIL+"Leapp version not known")
             print("\tLeapp version should be either 8.6, 8.8, 8.9, or 8.10")
@@ -142,12 +142,10 @@ def get_leapp_version(LEAPP_VERSION=None):
             exit(1)
     else:
         print("\nLeapp version should be either '8.6', '8.8', '8.9', or '8.10'")
-        global UPGRADE_TO_VERSION
         while not LEAPP_VERSION:
             LEAPP_VERSION = input('\tEnter the RHEL version you plan to leapp to: ')
             print('\n')
             if str(LEAPP_VERSION) in RHEL_8_VERSIONS:
-                UPGRADE_TO_VERSION = str(LEAPP_VERSION)
                 continue
             else:
                 print(FAIL+'\nYou have entered '+LEAPP_VERSION)
@@ -234,7 +232,7 @@ def search_for_host():
         print("\tExample: \"satellite_leapp_check -c client.example.com\"")
         exit(1)
 
-def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
+def enable_leapp_repos(org_id, arch, LEAPP_VERSION,sub_arch=None):
     # Run commands to enable leapp_repos on the Satellite
     command = 'hammer repository-set enable '
     name = '--name '
@@ -249,7 +247,6 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                     result = subprocess.run(hammer_enable_repo, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     if result.returncode == 0:
                         print(SUCCESS+" Repository Enabled: "+repo)
-                        #print(result.stdout)
                         print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
                     else:
                         if result.stderr.decode('UTF-8') == 'Could not enable repository:\n  Error: 409 Conflict\n':
@@ -259,11 +256,10 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                             print(result.stderr.decode('UTF-8'))
                             exit(1)
                 for repo in ENABLE_LEAPP_REPOS[arch][sub_arch]["rhel8"]:
-                    hammer_enable_repo = command+name+'"'+repo+'"'+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
+                    hammer_enable_repo = command+name+'"'+repo+'"'+' '+release+LEAPP_VERSION+' '+basearch+arch+' '+org+str(org_id)
                     result = subprocess.run(hammer_enable_repo, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     if result.returncode == 0:
                         print(SUCCESS+" Repository Enabled: "+repo)
-                        #print(result.stdout)
                         print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
                     else:
                         if result.stderr.decode('UTF-8') == 'Could not enable repository:\n  Error: 409 Conflict\n':
@@ -282,7 +278,6 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                 result = subprocess.run(hammer_enable_repo, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 if result.returncode == 0:
                     print(SUCCESS+" Repository Enabled: "+repo)
-                    #print(result.stdout)
                     print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
                 else:
                     if result.stderr.decode('UTF-8') == 'Could not enable repository:\n  Error: 409 Conflict\n':
@@ -292,11 +287,10 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                         print(result.stderr.decode('UTF-8'))
                         exit(1)
         for repo in ENABLE_LEAPP_REPOS[arch]["rhel8"]:
-            hammer_enable_repo = command+name+'"'+repo+'"'+' '+release+releasever+' '+basearch+arch+' '+org+str(org_id)
+            hammer_enable_repo = command+name+'"'+repo+'"'+' '+release+LEAPP_VERSION+' '+basearch+arch+' '+org+str(org_id)
             result = subprocess.run(hammer_enable_repo, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             if result.returncode == 0:
                 print(SUCCESS+" Repository Enabled: "+repo)
-                #print(result.stdout)
                 print("Please sync this repository before attempting to include it in any content view or accessing it via a client") # REMOVE after RFE 2240648
             else:
                 if result.stderr.decode('UTF-8') == 'Could not enable repository:\n  Error: 409 Conflict\n':
@@ -305,6 +299,7 @@ def enable_leapp_repos(org_id, arch, releasever,sub_arch=None):
                     print(FAIL+" Failed to enable repository: "+repo)
                     print(result.stderr.decode('UTF-8'))
                     exit(1)
+
 def sync_leapp_repos(org_id, arch, releasever, leapp_repos):
     # Run commands to sync the leapp repos
     # Not available until RFE 2240648
@@ -686,7 +681,7 @@ def parse_client():
                         if check_repos_for_content(cv_id,leapp_repos,client_lce):
                             print(SUCCESS+" Congratulations!!! "+client['name']+' is ready to LEAPP')
                 else:
-                    enable_leapp_repos(org_id, arch, UPGRADE_TO_VERSION, leapp_repos)
+                    enable_leapp_repos(org_id, arch, LEAPP_VERSION, leapp_repos)
                     if check_org_for_leapp_repos(org_id,leapp_repos):
                         print(SUCCESS+" Organization ID "+str(org_id)+" has the required repos enabled")
                         print("Checking client's content view for repo availability")
